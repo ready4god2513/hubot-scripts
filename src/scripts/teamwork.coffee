@@ -13,33 +13,35 @@
 #
 # Author:
 #   ready4god2513
-module.exports = (robot) ->
-  robot.respond /complete task ([0-9]+)/i, (msg) ->
-    id = msg.match[1]
-    user = process.env.HUBOT_TEAMWORK_API_KEY
-    teamwork_url = process.env.HUBOT_TEAMWORK_URL
 
-    unless user
-      msg.send "The HUBOT_TEAMWORK_API_KEY must be provided in order to complete teamwork tasks"
-      return
+class Teamwork
 
-    unless teamwork_url
-      msg.send "The HUBOT_TEAMWORK_URL must be provided in order to complete teamwork tasks"
-      return
+  constructor: (@robot, @baseURL, @key) ->
+    this.validateOptions()
+    @auth = 'BASIC ' + new Buffer("#{@key}:xxx").toString('base64')
 
-    auth = 'BASIC ' + new Buffer("#{user}:xxx").toString('base64');
-    url = "#{teamwork_url}/tasks/#{id}/complete.json"
-
-    msg.http(url)
-      .headers(Authorization: auth)
+  completeTask: (id, cb) ->
+    @robot.http("#{@baseURL}/tasks/#{id}/complete.json")
+      .headers(Authorization: @auth)
       .put() (err, res, body) ->
         switch res.statusCode
           when 200
-            msg.send "Great!  Task #{id} was marked complete"
-          when 401
-            msg.send "
-              Your authentication credentials were denied.  
-              Please check your HUBOT_TEAMWORK_API_KEY and HUBOT_TEAMWORK_URL
-              "
+            cb "Great!  Task #{id} was marked complete"
           else
-            msg.send body
+            cb body
+
+  validateOptions: ->
+    unless @key
+      throw 'The HUBOT_TEAMWORK_API_KEY must be provided in order to complete teamwork tasks'
+    unless @baseURL
+      throw 'The HUBOT_TEAMWORK_URL must be provided in order to complete teamwork tasks'
+
+
+module.exports = (robot) ->
+  robot.respond /complete task ([0-9]+)/i, (msg) ->
+    try
+      teamwork = new Teamwork robot, process.env.HUBOT_TEAMWORK_URL, process.env.HUBOT_TEAMWORK_API_KEY
+      teamwork.completeTask msg.match[1], (str) ->
+        msg.send str
+    catch e
+      msg.send "Error: #{e}"
